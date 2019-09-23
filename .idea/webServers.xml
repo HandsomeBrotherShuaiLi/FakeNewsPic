@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="23f56d5c-cfe3-41a2-a592-20f7ee727a2b" name="next_5" url="http://next-gpu5.d2.comp.nus.edu.sg">
+        <fileTransfer host="next-gpu5.d2.comp.nus.edu.sg" port="22" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>
