@@ -10,6 +10,14 @@
           <option name="port" value="22" />
         </fileTransfer>
       </webServer>
+      <webServer id="c7f462bc-becd-4443-ad36-ee091d3ff621" name="nus_2" url="http://weisshorn.d2.comp.nus.edu.sg">
+        <fileTransfer host="weisshorn.d2.comp.nus.edu.sg" port="22" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
     </option>
   </component>
 </project>
