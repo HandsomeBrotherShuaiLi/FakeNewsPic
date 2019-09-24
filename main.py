@@ -284,7 +284,7 @@ class Mymodel(object):
         model.load_weights(model_path)
         fail=open('fail_predictions.txt','w',encoding='utf-8')
         submit=pd.DataFrame(columns={'id','label'})
-        for i in os.listdir(test_dir):
+        for c,i in enumerate(os.listdir(test_dir)):
             try:
                 path = os.path.join(test_dir, i)
                 img = Image.open(path)
@@ -298,21 +298,22 @@ class Mymodel(object):
                 如果pred<0.5那么应该是虚假图片，按照我的标注应该是0，但是提交要求是虚假新闻是1
                 如果pred>=0.5,那么应该是真实图片，真实图片的label是0
                 """
-                print(i,pred[0][0])
+                print(i,pred[0][0],'{}/{}'.format(c,len(os.listdir(test_dir))))
                 if pred[0][0]<=0.5:
                     submit=submit.append({'id':i.split('.')[0],'label':1},ignore_index=True)
                 else:
                     submit=submit.append({'id':i.split('.')[0],'label':0},ignore_index=True)
             except:
+                print('*'*50+i+' ERROR!!!'+'*'*50)
                 fail.write(str(i.split('.')[0])+'\n')
-        submit.to_csv('submit_v1.csv',index=False)
+        submit.to_csv('submit_v2.csv',index=False)
         fail.close()
 
 m=Mymodel(shape=(256,256,3),batch_size=16)
 # m.build_network(model_name='resnet50',fine_tune=True)
 # m.train(model_name='resnet50',fine_tune=False,optimizer='adam')
 m.predict(
-    model_path='models/resnet50_adam_-008--0.31349--0.85968.hdf5',
+    model_path='models/resnet50_adam_-013--0.32005--0.87891.hdf5',
     model_name='resnet50',fine_tune=False,test_dir='/media/lishuai/Newsmy/biendata/task2/stage1_test'
 )
 # m.predict(model_path='models/vgg16_fine_tune_adam_-002--0.67326--0.59946.hdf5',
