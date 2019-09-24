@@ -9,6 +9,9 @@ import keras.backend as K
 from keras.optimizers import Adam,SGD
 from keras.callbacks import ReduceLROnPlateau,ModelCheckpoint,EarlyStopping,TensorBoard
 K.set_image_data_format('channels_last')
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+# np.random.seed(2019)
 class Data(object):
     def __init__(self,shape,
                  true_pic_dir='F:\\biendata\\task2\\train\\truth_pic',
@@ -51,18 +54,31 @@ class Data(object):
             if start+self.batch_size<len(index):
                 batch_index=index[start:start+self.batch_size]
             else:
-                batch_index=np.hstack(index[start:],index[:(start+self.batch_size)%len(index)])
+                batch_index=np.hstack((index[start:],index[:(start+self.batch_size)%len(index)]))
             for i in batch_index:
                 path,label=self.train_file[i]
-                img=Image.open(path)
+                try:
+                    img = Image.open(path)
+                except:
+                    continue
                 # img.size 宽 高
+                img=img.convert('RGB')
                 img=img.resize(size=(self.shape[1],self.shape[0]),resample=Image.ANTIALIAS)
                 img=np.array(img)
                 img=(img/ 255.0) * 2.0-1.0
                 inputs.append(img)
                 labels.append([label])
+            if len(inputs)<self.batch_size:
+                temp_index=np.array(range(len(inputs)))
+                rest_num=self.batch_size-len(inputs)
+                r_index=np.random.choice(temp_index,rest_num)
+                rest_inputs=[inputs[j] for j in r_index]
+                rest_labels=[labels[j] for j in r_index]
+                inputs+=rest_inputs
+                labels+=rest_labels
             inputs=np.array(inputs)
             labels=np.array(labels)
+            # print(inputs.shape)
             yield inputs,labels
             start=(start+self.batch_size)%len(index)
 
@@ -128,8 +144,6 @@ class Mymodel(object):
                                 verbose=1,save_weights_only=False,save_best_only=True)
             ]
         )
-
-
 m=Mymodel(shape=(512,512,3),batch_size=16)
-m.train(model_name='vgg16',fine_tune=True,optimizer='adam')
+m.train(model_name='vgg16',fine_tune=False,optimizer='adam')
 
