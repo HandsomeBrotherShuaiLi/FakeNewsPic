@@ -11,7 +11,7 @@ from keras.callbacks import ReduceLROnPlateau,ModelCheckpoint,EarlyStopping,Tens
 K.set_image_data_format('channels_last')
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-import pandas as pd
+
 # np.random.seed(2019)
 class Data(object):
     def __init__(self,shape,
@@ -249,6 +249,7 @@ class Mymodel(object):
         opt=Adam(0.001) if optimizer.lower()=='adam' else SGD(0.001)
         model=self.build_network(model_name=model_name,fine_tune=fine_tune)
         model.compile(optimizer=opt,loss='binary_crossentropy',metrics=['acc'])
+        # model.load_weights('models/resnet50_adam_-015--0.21198--0.91197.hdf5')
         f='fine_tune_' if fine_tune else str()
         model_file_name=model_name+'_'+f+optimizer+'_'+'-{epoch:03d}--{val_loss:.5f}--{val_acc:.5f}.hdf5'
         model.fit_generator(
@@ -257,12 +258,12 @@ class Mymodel(object):
             validation_data=data.generator(is_train=False),
             validation_steps=data.val_steps_per_epoch,
             verbose=1,
-            initial_epoch=0,epochs=100,
+            initial_epoch=14,epochs=200,
             callbacks=[
                 TensorBoard('logs'),
-                ReduceLROnPlateau(monitor='val_acc',patience=7,verbose=1),
-                EarlyStopping(monitor='val_acc',patience=40,verbose=1),
-                ModelCheckpoint(filepath=os.path.join('models',model_file_name),monitor='val_acc',
+                ReduceLROnPlateau(monitor='val_loss',patience=7,verbose=1),
+                EarlyStopping(monitor='val_loss',patience=40,verbose=1,restore_best_weights=True),
+                ModelCheckpoint(filepath=os.path.join('models',model_file_name),monitor='val_loss',
                                 verbose=1,save_weights_only=False,save_best_only=True)
             ]
         )
@@ -276,6 +277,7 @@ class Mymodel(object):
         :param model_name:
         :return:
         """
+        import pandas as pd
         if model_name.lower()=='nasnetlarge':
             self.shape=(331,331,3)
         elif model_name.lower()=='nasnetmobile':
@@ -283,8 +285,12 @@ class Mymodel(object):
         model=self.build_network(model_name,fine_tune)
         model.load_weights(model_path)
         fail=open('fail_predictions.txt','w',encoding='utf-8')
+        c=0
         submit=pd.DataFrame(columns={'id','label'})
-        for c,i in enumerate(os.listdir(test_dir)):
+        id=[]
+        label=[]
+        for i in os.listdir(test_dir):
+            c+=1
             try:
                 path = os.path.join(test_dir, i)
                 img = Image.open(path)
@@ -299,23 +305,24 @@ class Mymodel(object):
                 如果pred>=0.5,那么应该是真实图片，真实图片的label是0
                 """
                 print(i,pred[0][0],'{}/{}'.format(c,len(os.listdir(test_dir))))
-                if pred[0][0]<=0.5:
-                    submit=submit.append({'id':i.split('.')[0],'label':1},ignore_index=True)
+                if pred[0][0]<0.5:
+                    id.append(i.split('.')[0])
+                    label.append(1)
+                    # submit=submit.append({'id':i.split('.')[0],'label':1},ignore_index=True)
+                    # print({'id': i.split('.')[0], 'label': 1})
                 else:
-                    submit=submit.append({'id':i.split('.')[0],'label':0},ignore_index=True)
+                    id.append(i.split('.')[0])
+                    label.append(0)
+                    # print({'id': i.split('.')[0], 'label': 0})
+
             except:
                 print('*'*50+i+' ERROR!!!'+'*'*50)
                 fail.write(str(i.split('.')[0])+'\n')
+        submit['id']=id
+        submit['label']=label
         submit.to_csv('submit_v2.csv',index=False)
         fail.close()
 
-m=Mymodel(shape=(256,256,3),batch_size=16)
-# m.build_network(model_name='resnet50',fine_tune=True)
-# m.train(model_name='resnet50',fine_tune=False,optimizer='adam')
-m.predict(
-    model_path='models/resnet50_adam_-013--0.32005--0.87891.hdf5',
-    model_name='resnet50',fine_tune=False,test_dir='/media/lishuai/Newsmy/biendata/task2/stage1_test'
-)
-# m.predict(model_path='models/vgg16_fine_tune_adam_-002--0.67326--0.59946.hdf5',
-#           model_name='vgg16',fine_tune=True,test_dir='F:\\biendata\\task2\\stage1_test')
-#tail -fn 50 nohup.out
+if __name__=='__main__':
+    m = Mymodel(shape=(256, 256, 3), batch_size=16)
+    m.train(model_name='inceptionresnetv2', fine_tune=False, optimizer='adam')
