@@ -62,7 +62,7 @@ def submit(file):
     res=pd.DataFrame()
     res['id']=f['id']
     res['label']=f['label']
-    res.to_csv('submit_v3.csv',index=False,encoding='utf-8')
-submit('submit_v2.csv')
+    res.to_csv(file,index=False,encoding='utf-8')
+submit('submit_densenet121_046.csv')
 
 # tail -fn 50 nohup.out

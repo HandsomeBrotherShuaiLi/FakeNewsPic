@@ -1,11 +1,15 @@
-from PIL import Image
 import os,numpy as np
-from keras.applications import VGG16,VGG19,ResNet50
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
+from PIL import Image
+from keras.applications import VGG16,VGG19
 from keras.applications import InceptionResNetV2,Xception,DenseNet121,DenseNet169,DenseNet201
 from keras.applications import NASNetLarge,NASNetMobile
 from keras import Model
+from keras_applications.resnet import ResNet50,ResNet152,ResNet101
 from keras.layers import Dense,Dropout
 import keras.backend as K
+import keras
 from keras.optimizers import Adam,SGD
 from keras.callbacks import ReduceLROnPlateau,ModelCheckpoint,EarlyStopping,TensorBoard
 K.set_image_data_format('channels_last')
@@ -122,7 +126,8 @@ class Mymodel(object):
                 model.summary()
                 return model
         elif model_name.lower()=='resnet50':
-            base_model=ResNet50(include_top=False,input_shape=self.shape,pooling='avg')
+            base_model=ResNet50(include_top=False,input_shape=self.shape,pooling='avg',
+                                backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
             x = base_model.output
             x = Dense(1024, activation='relu')(x)
             x = Dropout(0.3)(x)
@@ -132,6 +137,47 @@ class Mymodel(object):
             if fine_tune:
                 for layer in base_model.layers:
                     layer.trainable=False
+            model.summary()
+            return model
+        # elif model_name.lower()=='resnet34':
+        #     base_model=ResNet34(include_top=False, input_shape=self.shape, pooling='avg')
+        #     x = base_model.output
+        #     x = Dense(1024, activation='relu')(x)
+        #     x = Dropout(0.3)(x)
+        #     x = Dense(1024, activation='relu')(x)
+        #     predictions = Dense(1, activation='sigmoid')(x)
+        #     model = Model(base_model.input, predictions)
+        #     if fine_tune:
+        #         for layer in base_model.layers:
+        #             layer.trainable = False
+        #     model.summary()
+        #     return model
+        elif model_name.lower()=='resnet101':
+            base_model = ResNet101(include_top=False, input_shape=self.shape, pooling='avg',
+                                   backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
+            x = base_model.output
+            x = Dense(1024, activation='relu')(x)
+            x = Dropout(0.3)(x)
+            x = Dense(1024, activation='relu')(x)
+            predictions = Dense(1, activation='sigmoid')(x)
+            model = Model(base_model.input, predictions)
+            if fine_tune:
+                for layer in base_model.layers:
+                    layer.trainable = False
+            model.summary()
+            return model
+        elif model_name.lower()=='resnet152':
+            base_model = ResNet152(include_top=False, input_shape=self.shape, pooling='avg',
+                                   backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
+            x = base_model.output
+            x = Dense(1024, activation='relu')(x)
+            x = Dropout(0.3)(x)
+            x = Dense(1024, activation='relu')(x)
+            predictions = Dense(1, activation='sigmoid')(x)
+            model = Model(base_model.input, predictions)
+            if fine_tune:
+                for layer in base_model.layers:
+                    layer.trainable = False
             model.summary()
             return model
         elif model_name.lower()=='inceptionresnetv2':
@@ -249,7 +295,7 @@ class Mymodel(object):
         opt=Adam(0.001) if optimizer.lower()=='adam' else SGD(0.001)
         model=self.build_network(model_name=model_name,fine_tune=fine_tune)
         model.compile(optimizer=opt,loss='binary_crossentropy',metrics=['acc'])
-        # model.load_weights('models/resnet50_adam_-015--0.21198--0.91197.hdf5')
+        # model.load_weights('models/inceptionresnetv2_adam_-026--0.37283--0.85329.hdf5')
         f='fine_tune_' if fine_tune else str()
         model_file_name=model_name+'_'+f+optimizer+'_'+'-{epoch:03d}--{val_loss:.5f}--{val_acc:.5f}.hdf5'
         model.fit_generator(
@@ -258,12 +304,12 @@ class Mymodel(object):
             validation_data=data.generator(is_train=False),
             validation_steps=data.val_steps_per_epoch,
             verbose=1,
-            initial_epoch=14,epochs=200,
+            initial_epoch=0,epochs=200,
             callbacks=[
                 TensorBoard('logs'),
-                ReduceLROnPlateau(monitor='val_loss',patience=7,verbose=1),
-                EarlyStopping(monitor='val_loss',patience=40,verbose=1,restore_best_weights=True),
-                ModelCheckpoint(filepath=os.path.join('models',model_file_name),monitor='val_loss',
+                ReduceLROnPlateau(monitor='val_acc',patience=7,verbose=1),
+                EarlyStopping(monitor='val_acc',patience=40,verbose=1,restore_best_weights=True),
+                ModelCheckpoint(filepath=os.path.join('models',model_file_name),monitor='val_acc',
                                 verbose=1,save_weights_only=False,save_best_only=True)
             ]
         )
@@ -284,9 +330,10 @@ class Mymodel(object):
             self.shape=(224,224,3)
         model=self.build_network(model_name,fine_tune)
         model.load_weights(model_path)
+        epoch=model_path.split('--')[0][-3:]
         fail=open('fail_predictions.txt','w',encoding='utf-8')
         c=0
-        submit=pd.DataFrame(columns={'id','label'})
+        submit=pd.DataFrame()
         id=[]
         label=[]
         for i in os.listdir(test_dir):
@@ -305,24 +352,26 @@ class Mymodel(object):
                 如果pred>=0.5,那么应该是真实图片，真实图片的label是0
                 """
                 print(i,pred[0][0],'{}/{}'.format(c,len(os.listdir(test_dir))))
-                if pred[0][0]<0.5:
+                if pred[0][0]<=0.5:
                     id.append(i.split('.')[0])
                     label.append(1)
-                    # submit=submit.append({'id':i.split('.')[0],'label':1},ignore_index=True)
-                    # print({'id': i.split('.')[0], 'label': 1})
                 else:
                     id.append(i.split('.')[0])
                     label.append(0)
-                    # print({'id': i.split('.')[0], 'label': 0})
-
             except:
                 print('*'*50+i+' ERROR!!!'+'*'*50)
                 fail.write(str(i.split('.')[0])+'\n')
         submit['id']=id
         submit['label']=label
-        submit.to_csv('submit_v2.csv',index=False)
+        submit.to_csv('submit_{}_{}.csv'.format(model_name,epoch),index=False)
         fail.close()
 
 if __name__=='__main__':
     m = Mymodel(shape=(256, 256, 3), batch_size=16)
-    m.train(model_name='inceptionresnetv2', fine_tune=False, optimizer='adam')
+    # m.train(model_name='resnet101', fine_tune=False, optimizer='adam')
+    m.predict(model_name='densenet121',
+              fine_tune=False,test_dir='/media/lishuai/Newsmy/biendata/task2/stage1_test',
+              model_path='models/densenet121_adam_-057--0.85544--0.90698.hdf5')
+    m.predict(model_name='densenet121',
+              fine_tune=False, test_dir='/media/lishuai/Newsmy/biendata/task2/stage1_test',
+              model_path='models/densenet121_adam_-058--0.89474--0.90933.hdf5')
