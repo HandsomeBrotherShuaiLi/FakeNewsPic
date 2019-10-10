@@ -63,6 +63,6 @@ def submit(file):
     res['id']=f['id']
     res['label']=f['label']
     res.to_csv(file,index=False,encoding='utf-8')
-submit('submit_densenet121_046.csv')
+# submit('submit_densenet121_046.csv')
 
 # tail -fn 50 nohup.out

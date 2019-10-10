@@ -444,54 +444,126 @@ class Mymodel(object):
             vote_prediction.close()
             print('模型投票结束,生成了submissions/vote_{}_predictions.csv文件'.format(csv_name))
         elif mode=='avg':
-            id2probs=defaultdict(list)
-            for i in range(len(model_name_list)):
-                id,probs=self.predict(model_name=model_name_list[i],model_path=model_path_list[i],fine_tune=False,
-                                      test_dir=test_image_dir)
-                for j in range(len(id)):
-                    id2probs[id[j]].append(probs[j])
-                    if len(id2probs[id[j]])>len(model_path_list):
-                        raise ValueError('{}得到的probs是{}个,然而最多只能是{}个'.format(id[j],len(id2probs[id[j]]),len(model_path_list)))
-            f=open('submissions/avg_{}_predictions.csv'.format(csv_name),
-                                 'w',encoding='utf-8')
+            files=os.listdir('submissions')
+            id2probs = defaultdict(list)
+            for i in range(len(model_path_list)):
+                prob_file_name='prob_{}_{}.txt'.format(model_name_list[i],model_epoch_list[i])
+                if prob_file_name not in files:
+                    f=open(os.path.join('submissions',prob_file_name),'w',encoding='utf-8')
+                    id, probs = self.predict(model_name=model_name_list[i], model_path=model_path_list[i],
+                                             fine_tune=False,
+                                             test_dir=test_image_dir)
+                    for j in range(len(id)):
+                        id2probs[id[j]].append(probs[j])
+                        f.write('{},{}\n'.format(id[j],probs[j]))
+                        if len(id2probs[id[j]]) > len(model_path_list):
+                            raise ValueError(
+                                '{}得到的probs是{}个,然而最多只能是{}个'.format(id[j], len(id2probs[id[j]]), len(model_path_list)))
+                    f.close()
+                else:
+                    f=open(os.path.join('submissions',prob_file_name),'r',encoding='utf-8').readlines()
+                    print('找到{}'.format(os.path.join('submissions',prob_file_name)))
+                    for line in f:
+                        if line !='\n':
+                            temp = line.split(',')
+                            id2probs[temp[0].strip(',')].append(float(temp[-1].strip('\n')))
+            f = open('submissions/avg_{}_predictions.csv'.format(csv_name),
+                     'w', encoding='utf-8')
             f.write('id,label\n')
             for id in id2probs:
-                avg_prob=sum(id2probs[id])/len(id2probs[id])
-                if avg_prob<=0.5:
-                    f.write('{},{}\n'.format(id,1))
+                avg_prob = sum(id2probs[id]) / len(id2probs[id])
+                if avg_prob <= 0.5:
+                    f.write('{},{}\n'.format(id, 1))
                 else:
                     f.write('{},{}\n'.format(id, 0))
             f.write('\n')
             f.close()
             print('模型avg结束,生成了submissions/avg_{}_predictions.csv文件'.format(csv_name))
         else:
-            raise NotImplementedError('还没实现呢！')
+            files = os.listdir('submissions')
+            id2probs = defaultdict(list)#要预测的输入
+            for i in range(len(model_path_list)):
+                prob_file_name = 'prob_{}_{}.txt'.format(model_name_list[i], model_epoch_list[i])
+                if prob_file_name not in files:
+                    f = open(os.path.join('submissions',prob_file_name), 'w', encoding='utf-8')
+                    id, probs = self.predict(model_name=model_name_list[i], model_path=model_path_list[i],
+                                             fine_tune=False,
+                                             test_dir=test_image_dir)
+                    for j in range(len(id)):
+                        id2probs[id[j]].append(probs[j])
+                        f.write('{},{}\n'.format(id[j], probs[j]))
+                        if len(id2probs[id[j]]) > len(model_path_list):
+                            raise ValueError(
+                                '{}得到的probs是{}个,然而最多只能是{}个'.format(id[j], len(id2probs[id[j]]), len(model_path_list)))
+                    f.close()
+                else:
+                    f = open(os.path.join('submissions',prob_file_name), 'r', encoding='utf-8').readlines()
+                    print('找到{}'.format(os.path.join('submissions', prob_file_name)))
+                    for line in f:
+                        if line !='\n':
+                            temp = line.split(',')
+                            id2probs[temp[0].strip(',')].append(float(temp[-1].strip('\n')))
 
+            f = open('submissions/{}_{}_predictions.csv'.format(mode,csv_name),
+                     'w', encoding='utf-8')
+            f.write('id,label\n')
+            all_train_dict=defaultdict(list)
+            all_labels={}
+            for name in os.listdir(self.t_dir):
+                all_labels[name.split('.')[0]]=1
+            for name in os.listdir(self.f_dir):
+                all_labels[name.split('.')[0]]=0
+            for i in range(len(model_path_list)):
+                train_prob_file_name = 'train_prob_{}_{}.txt'.format(model_name_list[i], model_epoch_list[i])
+                if train_prob_file_name not in files:
+                    train_prob_file = open(os.path.join('submissions',train_prob_file_name), 'w', encoding='utf-8')
+                    id, probs = self.predict(model_name=model_name_list[i], model_path=model_path_list[i],
+                                             fine_tune=False,
+                                             test_dir=self.t_dir)
+                    id_1,probs_1=self.predict(model_name=model_name_list[i], model_path=model_path_list[i],
+                                             fine_tune=False,
+                                             test_dir=self.f_dir)
+                    id=id+id_1
+                    probs=probs+probs_1
+                    for j in range(len(id)):
+                        all_train_dict[id[j]].append(probs[j])
+                        train_prob_file.write('{},{}\n'.format(id[j], probs[j]))
+                        if len(all_train_dict[id[j]]) > len(model_path_list):
+                            raise ValueError(
+                                '{}得到的probs是{}个,然而最多只能是{}个'.format(id[j], len(all_train_dict[id[j]]), len(model_path_list)))
+                    train_prob_file.close()
+                else:
+                    train_prob_file=open(os.path.join('submissions',train_prob_file_name),'r',encoding='utf-8').readlines()
+                    print('找到{}'.format(os.path.join('submissions', train_prob_file_name)))
+                    for line in train_prob_file:
+                        if line!='\n':
+                            temp = line.split(',')
+                            all_train_dict[temp[0].strip().strip(',')].append(temp[-1].strip('\n'))
+            all_data=[]
+            for id in all_train_dict:
+                all_data.append([id]+list(all_train_dict[id])+list(all_labels[id]))
+            all_data=np.array(all_data)
+            print('all data shape:{}'.format(all_data.shape))
+            np.random.shuffle(all_data)
+            from sklearn.model_selection import KFold,train_test_split,cross_val_score,cross_validate
+            from sklearn.linear_model import LinearRegression
+            from sklearn.svm import SVC,SVR
+            X_train, X_test, y_train, y_test = train_test_split(all_data[:,1:-1], all_data[:,-1], test_size=0.3, random_state=0)
+            print('训练集大小：', X_train.shape, y_train.shape)  # 训练集样本大小
+            print('测试集大小：', X_test.shape, y_test.shape)  # 测试集样本大小
+            # clf = SVC(kernel='linear', C=1).fit(X_train, y_train)  # 使用训练集训练模型
+            # print('准确率：', )  # 计算测试集的度量值（准确率）
 if __name__=='__main__':
     m = Mymodel(shape=(256, 256, 3), batch_size=16)
     m.ensemble(
         model_path_list=['models/densenet121_adam_-043--0.51932--0.90141.hdf5',
                          'models/densenet121_adam_-046--0.78712--0.90434.hdf5',
-                         'models/Xception_adam_-021--0.53468--0.90346--0.91855.hdf5'],
-        mode='avg',test_image_dir='stage1_test'
+                         'models/Xception_adam_-021--0.53468--0.90346--0.91855.hdf5',
+                         'models/Xception_adam_-011--0.43643--0.89143--0.90778.hdf5',
+                         'models/Xception_adam_-024--0.84816--0.90405--0.91918.hdf5',
+                         'models/densenet121_adam_-074--1.06862--0.91197.hdf5',
+                         'models/densenet121_adam_-053--0.87286--0.90522.hdf5',
+                         'models/densenet121_adam_-058--0.89474--0.90933.hdf5'
+                         ],
+        mode='lr',test_image_dir='stage1_test'
     )
-    # m.train(model_name='Xception', fine_tune=False, optimizer='adam')
-    # m.predict(model_name='Xception',
-    #           fine_tune=False,test_dir='stage1_test',
-    #           model_path='models/Xception_adam_-024--0.84816--0.90405--0.91918.hdf5')
-    # m.predict(model_name='Xception',
-    #           fine_tune=False, test_dir='stage1_test',
-    #           model_path='models/Xception_adam_-027--0.84886--0.90581--0.92097.hdf5')
-    # m.predict(model_name='Xception',
-    #           fine_tune=False, test_dir='stage1_test',
-    #           model_path='models/Xception_adam_-032--0.93856--0.90728--0.92185.hdf5')
-    # m.predict(model_name='Xception',
-    #           fine_tune=False, test_dir='stage1_test',
-    #           model_path='models/Xception_adam_-035--0.97592--0.90786--0.92369.hdf5')
-
-    # m.predict(model_name='resnet50',
-    #           fine_tune=False, test_dir='stage1_test',
-    #           model_path='models/resnet50_adam_-008--0.32845--0.85886--0.87813.hdf5')
-    # m.predict(model_name='densenet121',
-    #           fine_tune=False, test_dir='/media/lishuai/Newsmy/biendata/task2/stage1_test',
-    #           model_path='models/densenet121_adam_-058--0.89474--0.90933.hdf5')
