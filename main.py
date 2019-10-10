@@ -1,6 +1,5 @@
 import os,numpy as np
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-
 from PIL import Image
 from keras.applications import VGG16,VGG19
 from keras.applications import InceptionResNetV2,Xception,DenseNet121,DenseNet169,DenseNet201
@@ -15,7 +14,35 @@ from keras.callbacks import ReduceLROnPlateau,ModelCheckpoint,EarlyStopping,Tens
 K.set_image_data_format('channels_last')
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
+def f1(y_true, y_pred):
+    def recall(y_true, y_pred):
+        """Recall metric.
 
+        Only computes a batch-wise average of recall.
+
+        Computes the recall, a metric for multi-label classification of
+        how many relevant items are selected.
+        """
+        true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+        possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+        recall = true_positives / (possible_positives + K.epsilon())
+        return recall
+
+    def precision(y_true, y_pred):
+        """Precision metric.
+
+        Only computes a batch-wise average of precision.
+
+        Computes the precision, a metric for multi-label classification of
+        how many selected items are relevant.
+        """
+        true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+        predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+        precision = true_positives / (predicted_positives + K.epsilon())
+        return precision
+    precision = precision(y_true, y_pred)
+    recall = recall(y_true, y_pred)
+    return 2*((precision*recall)/(precision+recall+K.epsilon()))
 # np.random.seed(2019)
 class Data(object):
     def __init__(self,shape,
@@ -294,10 +321,10 @@ class Mymodel(object):
                   rumor_pic_dir=self.f_dir,split_rate=self.split_rate)
         opt=Adam(0.001) if optimizer.lower()=='adam' else SGD(0.001)
         model=self.build_network(model_name=model_name,fine_tune=fine_tune)
-        model.compile(optimizer=opt,loss='binary_crossentropy',metrics=['acc'])
-        # model.load_weights('models/inceptionresnetv2_adam_-026--0.37283--0.85329.hdf5')
+        model.compile(optimizer=opt,loss='binary_crossentropy',metrics=['acc',f1])
+        # model.load_weights('models/resnet50_adam_-001--0.53286--0.77641--0.81211.hdf5')
         f='fine_tune_' if fine_tune else str()
-        model_file_name=model_name+'_'+f+optimizer+'_'+'-{epoch:03d}--{val_loss:.5f}--{val_acc:.5f}.hdf5'
+        model_file_name=model_name+'_'+f+optimizer+'_'+'-{epoch:03d}--{val_loss:.5f}--{val_acc:.5f}--{val_f1:.5f}.hdf5'
         model.fit_generator(
             generator=data.generator(is_train=True),
             steps_per_epoch=data.steps_per_epoch,
@@ -323,7 +350,6 @@ class Mymodel(object):
         :param model_name:
         :return:
         """
-        import pandas as pd
         if model_name.lower()=='nasnetlarge':
             self.shape=(331,331,3)
         elif model_name.lower()=='nasnetmobile':
@@ -333,9 +359,11 @@ class Mymodel(object):
         epoch=model_path.split('--')[0][-3:]
         fail=open('fail_predictions.txt','w',encoding='utf-8')
         c=0
-        submit=pd.DataFrame()
+        submit=open('submit_{}_{}.csv'.format(model_name,epoch),'w',encoding='utf-8')
+        submit.write('id,label\n')
         id=[]
         label=[]
+        probs=[]
         for i in os.listdir(test_dir):
             c+=1
             try:
@@ -351,27 +379,119 @@ class Mymodel(object):
                 如果pred<0.5那么应该是虚假图片，按照我的标注应该是0，但是提交要求是虚假新闻是1
                 如果pred>=0.5,那么应该是真实图片，真实图片的label是0
                 """
+                probs.append(pred[0][0])
                 print(i,pred[0][0],'{}/{}'.format(c,len(os.listdir(test_dir))))
                 if pred[0][0]<=0.5:
                     id.append(i.split('.')[0])
                     label.append(1)
+                    submit.write('{},{}\n'.format(i.split('.')[0],1))
                 else:
                     id.append(i.split('.')[0])
                     label.append(0)
+                    submit.write('{},{}\n'.format(i.split('.')[0],0))
             except:
                 print('*'*50+i+' ERROR!!!'+'*'*50)
                 fail.write(str(i.split('.')[0])+'\n')
-        submit['id']=id
-        submit['label']=label
-        submit.to_csv('submit_{}_{}.csv'.format(model_name,epoch),index=False)
+        submit.write('\n')
         fail.close()
+        submit.close()
+        return id,probs
+    def ensemble(self,model_path_list,mode='vote',test_image_dir=None):
+        """
+
+        :param model_path_list:对于投票制度，必须是奇数个模型
+        :param mode: vote,avg,lr,svm
+        :return:
+        """
+        model_name_list=[]
+        model_epoch_list=[]
+        from collections import defaultdict
+        for i in model_path_list:
+            temp=i.split('/')[-1].split('_')
+            model_name_list.append(temp[0])
+            model_epoch_list.append(temp[-1][1:].split('--')[0])
+        print(model_name_list)
+        print(model_epoch_list)
+        csv_name='_'.join([model_name_list[i]+'_'+model_epoch_list[i] for i in range(len(model_name_list))])
+        if mode=='vote':
+            vote_prediction=open('submissions/vote_{}_predictions.csv'.format(csv_name),
+                                 'w',encoding='utf-8')
+            predict_dicts=defaultdict(list)
+            for i in range(len(model_name_list)):
+                temp=open('submit_{}_{}.csv'.format(model_name_list[i], model_epoch_list[i]), 'r',
+                     encoding='utf-8').readlines()
+                for line in temp:
+                    if line=='\n' or line=='id,label\n':
+                        pass
+                    else:
+                        predict_dicts[line.split(',')[0]].append(line.split(',')[-1].strip('\n'))
+                        if len(predict_dicts[line.split(',')[0]])>3:
+                            raise ValueError('有重复id')
+            for i in predict_dicts:
+                if predict_dicts[i][0]==predict_dicts[i][2] and predict_dicts[i][0]!=predict_dicts[i][1]:
+                    print(i,predict_dicts[i])
+            vote_prediction.write('id,label\n')
+            for idx in predict_dicts.keys():
+                p=predict_dicts[idx]
+                one_num=p.count('1')
+                if one_num>len(p)-one_num:
+                    vote_prediction.write(idx+','+'1\n')
+                elif one_num<len(p)-one_num:
+                    vote_prediction.write(idx + ',' + '0\n')
+                else:
+                    raise ValueError('vote模式必须奇数个模型')
+            vote_prediction.write('\n')
+            vote_prediction.close()
+            print('模型投票结束,生成了submissions/vote_{}_predictions.csv文件'.format(csv_name))
+        elif mode=='avg':
+            id2probs=defaultdict(list)
+            for i in range(len(model_name_list)):
+                id,probs=self.predict(model_name=model_name_list[i],model_path=model_path_list[i],fine_tune=False,
+                                      test_dir=test_image_dir)
+                for j in range(len(id)):
+                    id2probs[id[j]].append(probs[j])
+                    if len(id2probs[id[j]])>len(model_path_list):
+                        raise ValueError('{}得到的probs是{}个,然而最多只能是{}个'.format(id[j],len(id2probs[id[j]]),len(model_path_list)))
+            f=open('submissions/avg_{}_predictions.csv'.format(csv_name),
+                                 'w',encoding='utf-8')
+            f.write('id,label\n')
+            for id in id2probs:
+                avg_prob=sum(id2probs[id])/len(id2probs[id])
+                if avg_prob<=0.5:
+                    f.write('{},{}\n'.format(id,1))
+                else:
+                    f.write('{},{}\n'.format(id, 0))
+            f.write('\n')
+            f.close()
+            print('模型avg结束,生成了submissions/avg_{}_predictions.csv文件'.format(csv_name))
+        else:
+            raise NotImplementedError('还没实现呢！')
 
 if __name__=='__main__':
     m = Mymodel(shape=(256, 256, 3), batch_size=16)
-    # m.train(model_name='resnet101', fine_tune=False, optimizer='adam')
-    m.predict(model_name='densenet121',
-              fine_tune=False,test_dir='/media/lishuai/Newsmy/biendata/task2/stage1_test',
-              model_path='models/densenet121_adam_-057--0.85544--0.90698.hdf5')
-    m.predict(model_name='densenet121',
-              fine_tune=False, test_dir='/media/lishuai/Newsmy/biendata/task2/stage1_test',
-              model_path='models/densenet121_adam_-058--0.89474--0.90933.hdf5')
+    m.ensemble(
+        model_path_list=['models/densenet121_adam_-043--0.51932--0.90141.hdf5',
+                         'models/densenet121_adam_-046--0.78712--0.90434.hdf5',
+                         'models/Xception_adam_-021--0.53468--0.90346--0.91855.hdf5'],
+        mode='avg',test_image_dir='stage1_test'
+    )
+    # m.train(model_name='Xception', fine_tune=False, optimizer='adam')
+    # m.predict(model_name='Xception',
+    #           fine_tune=False,test_dir='stage1_test',
+    #           model_path='models/Xception_adam_-024--0.84816--0.90405--0.91918.hdf5')
+    # m.predict(model_name='Xception',
+    #           fine_tune=False, test_dir='stage1_test',
+    #           model_path='models/Xception_adam_-027--0.84886--0.90581--0.92097.hdf5')
+    # m.predict(model_name='Xception',
+    #           fine_tune=False, test_dir='stage1_test',
+    #           model_path='models/Xception_adam_-032--0.93856--0.90728--0.92185.hdf5')
+    # m.predict(model_name='Xception',
+    #           fine_tune=False, test_dir='stage1_test',
+    #           model_path='models/Xception_adam_-035--0.97592--0.90786--0.92369.hdf5')
+
+    # m.predict(model_name='resnet50',
+    #           fine_tune=False, test_dir='stage1_test',
+    #           model_path='models/resnet50_adam_-008--0.32845--0.85886--0.87813.hdf5')
+    # m.predict(model_name='densenet121',
+    #           fine_tune=False, test_dir='/media/lishuai/Newsmy/biendata/task2/stage1_test',
+    #           model_path='models/densenet121_adam_-058--0.89474--0.90933.hdf5')
