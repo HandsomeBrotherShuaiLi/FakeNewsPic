@@ -45,7 +45,7 @@ def f1(y_true, y_pred):
     return 2*((precision*recall)/(precision+recall+K.epsilon()))
 # np.random.seed(2019)
 class Data(object):
-    def __init__(self,shape,
+    def __init__(self,shape_list,
                  true_pic_dir='F:\\biendata\\task2\\train\\truth_pic',
                  rumor_pic_dir='F:\\biendata\\task2\\train\\rumor_pic',
                  split_rate=0.1,batch_size=16):
@@ -57,7 +57,7 @@ class Data(object):
         :param split_rate:
         :param batch_size:
         """
-        self.shape=shape
+        self.shape_list=shape_list
         self.t_dir=true_pic_dir
         self.f_dir=rumor_pic_dir
         self.train_file=[]
@@ -86,6 +86,8 @@ class Data(object):
                 batch_index=index[start:start+self.batch_size]
             else:
                 batch_index=np.hstack((index[start:],index[:(start+self.batch_size)%len(index)]))
+            shape=self.shape_list[np.random.choice(range(len(self.shape_list)))]
+            degree=[0,90,180,270,360]
             for i in batch_index:
                 path,label=self.train_file[i]
                 try:
@@ -94,7 +96,10 @@ class Data(object):
                     continue
                 # img.size 宽 高
                 img=img.convert('RGB')
-                img=img.resize(size=(self.shape[1],self.shape[0]),resample=Image.ANTIALIAS)
+                #数据增强
+                ran_degree=np.random.choice(range(len(degree)))
+                img=img.rotate(degree[ran_degree],expand=True)
+                img=img.resize(size=(shape[1],shape[0]),resample=Image.ANTIALIAS)
                 img=np.array(img)
                 img=(img/ 255.0) * 2.0-1.0
                 inputs.append(img)
@@ -114,11 +119,11 @@ class Data(object):
             start=(start+self.batch_size)%len(index)
 
 class Mymodel(object):
-    def __init__(self,shape,batch_size,
+    def __init__(self,shape_list,batch_size,
                  t_dir='train/truth_pic',
                  f_dir='train/rumor_pic',
                  split_rate=0.1):
-        self.shape=shape
+        self.shape_list=shape_list
         self.t_dir=t_dir
         self.batch_size=batch_size
         self.f_dir=f_dir
@@ -126,7 +131,7 @@ class Mymodel(object):
     def build_network(self,model_name,fine_tune):
         if model_name.lower()=='vgg16':
             if fine_tune:
-                base_model=VGG16(include_top=False,input_shape=self.shape,pooling='avg')
+                base_model=VGG16(include_top=False,input_shape=(None,None,3),pooling='avg')
                 for layer in base_model.layers:
                     if layer.name.startswith('block5'):
                         layer.trainable = True
@@ -134,30 +139,30 @@ class Mymodel(object):
                         layer.trainable=False
                 x = base_model.output
                 x = Dense(1024, activation='relu')(x)
-                x=Dropout(0.3)(x)
+                x=Dropout(0.5)(x)
                 x = Dense(512,activation='relu')(x)
                 predictions = Dense(1, activation='sigmoid')(x)
                 model=Model(base_model.input,predictions)
                 model.summary()
                 return model
             else:
-                base_model = VGG16(include_top=False, input_shape=self.shape, pooling='avg')
+                base_model = VGG16(include_top=False, input_shape=(None,None,3), pooling='avg')
                 for layer in base_model.layers:
                     layer.trainable = True
                 x = base_model.output
                 x = Dense(1024, activation='relu')(x)
-                x = Dropout(0.3)(x)
+                x = Dropout(0.5)(x)
                 x = Dense(512, activation='relu')(x)
                 predictions = Dense(1, activation='sigmoid')(x)
                 model = Model(base_model.input, predictions)
                 model.summary()
                 return model
         elif model_name.lower()=='resnet50':
-            base_model=ResNet50(include_top=False,input_shape=self.shape,pooling='avg',
+            base_model=ResNet50(include_top=False,input_shape=(None,None,3),pooling='avg',
                                 backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
             x = base_model.output
             x = Dense(1024, activation='relu')(x)
-            x = Dropout(0.3)(x)
+            x = Dropout(0.5)(x)
             x = Dense(1024, activation='relu')(x)
             predictions = Dense(1, activation='sigmoid')(x)
             model = Model(base_model.input, predictions)
@@ -170,7 +175,7 @@ class Mymodel(object):
         #     base_model=ResNet34(include_top=False, input_shape=self.shape, pooling='avg')
         #     x = base_model.output
         #     x = Dense(1024, activation='relu')(x)
-        #     x = Dropout(0.3)(x)
+        #     x = Dropout(0.5)(x)
         #     x = Dense(1024, activation='relu')(x)
         #     predictions = Dense(1, activation='sigmoid')(x)
         #     model = Model(base_model.input, predictions)
@@ -180,11 +185,11 @@ class Mymodel(object):
         #     model.summary()
         #     return model
         elif model_name.lower()=='resnet101':
-            base_model = ResNet101(include_top=False, input_shape=self.shape, pooling='avg',
+            base_model = ResNet101(include_top=False, input_shape=(None,None,3), pooling='avg',
                                    backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
             x = base_model.output
             x = Dense(1024, activation='relu')(x)
-            x = Dropout(0.3)(x)
+            x = Dropout(0.5)(x)
             x = Dense(1024, activation='relu')(x)
             predictions = Dense(1, activation='sigmoid')(x)
             model = Model(base_model.input, predictions)
@@ -194,11 +199,11 @@ class Mymodel(object):
             model.summary()
             return model
         elif model_name.lower()=='resnet152':
-            base_model = ResNet152(include_top=False, input_shape=self.shape, pooling='avg',
+            base_model = ResNet152(include_top=False, input_shape=(None,None,3), pooling='avg',
                                    backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
             x = base_model.output
             x = Dense(1024, activation='relu')(x)
-            x = Dropout(0.3)(x)
+            x = Dropout(0.5)(x)
             x = Dense(1024, activation='relu')(x)
             predictions = Dense(1, activation='sigmoid')(x)
             model = Model(base_model.input, predictions)
@@ -208,10 +213,10 @@ class Mymodel(object):
             model.summary()
             return model
         elif model_name.lower()=='inceptionresnetv2':
-            base_model=InceptionResNetV2(include_top=False,input_shape=self.shape,pooling='avg')
+            base_model=InceptionResNetV2(include_top=False,input_shape=(None,None,3),pooling='avg')
             x = base_model.output
             x = Dense(1024, activation='relu')(x)
-            x = Dropout(0.3)(x)
+            x = Dropout(0.5)(x)
             x = Dense(1024, activation='relu')(x)
             predictions = Dense(1, activation='sigmoid')(x)
             model = Model(base_model.input, predictions)
@@ -221,10 +226,10 @@ class Mymodel(object):
             model.summary()
             return model
         elif model_name.lower()=='xception':
-            base_model=Xception(include_top=False,input_shape=self.shape,pooling='avg')
+            base_model=Xception(include_top=False,input_shape=(None,None,3),pooling='avg')
             x = base_model.output
             x = Dense(1024, activation='relu')(x)
-            x = Dropout(0.3)(x)
+            x = Dropout(0.5)(x)
             x = Dense(1024, activation='relu')(x)
             predictions = Dense(1, activation='sigmoid')(x)
             model = Model(base_model.input, predictions)
@@ -234,10 +239,10 @@ class Mymodel(object):
             model.summary()
             return model
         elif model_name.lower()=='densenet121':
-            base_model = DenseNet121(include_top=False, input_shape=self.shape, pooling='avg')
+            base_model = DenseNet121(include_top=False, input_shape=(None,None,3), pooling='avg')
             x = base_model.output
             x = Dense(1024, activation='relu')(x)
-            x = Dropout(0.3)(x)
+            x = Dropout(0.5)(x)
             x = Dense(1024, activation='relu')(x)
             predictions = Dense(1, activation='sigmoid')(x)
             model = Model(base_model.input, predictions)
@@ -247,10 +252,10 @@ class Mymodel(object):
             model.summary()
             return model
         elif model_name.lower()=='densenet169':
-            base_model = DenseNet169(include_top=False, input_shape=self.shape, pooling='avg')
+            base_model = DenseNet169(include_top=False, input_shape=(None,None,3), pooling='avg')
             x = base_model.output
             x = Dense(1024, activation='relu')(x)
-            x = Dropout(0.3)(x)
+            x = Dropout(0.5)(x)
             x = Dense(1024, activation='relu')(x)
             predictions = Dense(1, activation='sigmoid')(x)
             model = Model(base_model.input, predictions)
@@ -260,10 +265,10 @@ class Mymodel(object):
             model.summary()
             return model
         elif model_name.lower()=='densenet201':
-            base_model = DenseNet201(include_top=False, input_shape=self.shape, pooling='avg')
+            base_model = DenseNet201(include_top=False, input_shape=(None,None,3), pooling='avg')
             x = base_model.output
             x = Dense(1024, activation='relu')(x)
-            x = Dropout(0.3)(x)
+            x = Dropout(0.5)(x)
             x = Dense(1024, activation='relu')(x)
             predictions = Dense(1, activation='sigmoid')(x)
             model = Model(base_model.input, predictions)
@@ -273,10 +278,10 @@ class Mymodel(object):
             model.summary()
             return model
         elif model_name.lower()=='nasnetlarge':
-            base_model = NASNetLarge(include_top=False, input_shape=self.shape, pooling='avg')
+            base_model = NASNetLarge(include_top=False, input_shape=(None,None,3), pooling='avg')
             x = base_model.output
             x = Dense(1024, activation='relu')(x)
-            x = Dropout(0.3)(x)
+            x = Dropout(0.5)(x)
             x = Dense(1024, activation='relu')(x)
             predictions = Dense(1, activation='sigmoid')(x)
             model = Model(base_model.input, predictions)
@@ -286,10 +291,10 @@ class Mymodel(object):
             model.summary()
             return model
         elif model_name.lower()=='vgg19':
-            base_model = VGG19(include_top=False, input_shape=self.shape, pooling='avg')
+            base_model = VGG19(include_top=False, input_shape=(None,None,3), pooling='avg')
             x = base_model.output
             x = Dense(1024, activation='relu')(x)
-            x = Dropout(0.3)(x)
+            x = Dropout(0.5)(x)
             x = Dense(1024, activation='relu')(x)
             predictions = Dense(1, activation='sigmoid')(x)
             model = Model(base_model.input, predictions)
@@ -299,10 +304,10 @@ class Mymodel(object):
             model.summary()
             return model
         else:
-            base_model = NASNetMobile(include_top=False, input_shape=self.shape, pooling='avg')
+            base_model = NASNetMobile(include_top=False, input_shape=(None,None,3), pooling='avg')
             x = base_model.output
             x = Dense(1024, activation='relu')(x)
-            x = Dropout(0.3)(x)
+            x = Dropout(0.5)(x)
             x = Dense(1024, activation='relu')(x)
             predictions = Dense(1, activation='sigmoid')(x)
             model = Model(base_model.input, predictions)
@@ -314,17 +319,16 @@ class Mymodel(object):
 
     def train(self,model_name,fine_tune,optimizer='adam'):
         if model_name.lower()=='nasnetlarge':
-            self.shape=(331,331,3)
+            self.shape_list=[(331,331,3),(662,662,3)]
         elif model_name.lower()=='nasnetmobile':
-            self.shape=(224,224,3)
-        data=Data(shape=self.shape,batch_size=self.batch_size,true_pic_dir=self.t_dir,
+            self.shape_list=[(224,224,3),(448,448,3)]
+        data=Data(shape_list=self.shape_list,batch_size=self.batch_size,true_pic_dir=self.t_dir,
                   rumor_pic_dir=self.f_dir,split_rate=self.split_rate)
         opt=Adam(0.001) if optimizer.lower()=='adam' else SGD(0.001)
         model=self.build_network(model_name=model_name,fine_tune=fine_tune)
         model.compile(optimizer=opt,loss='binary_crossentropy',metrics=['acc',f1])
-        # model.load_weights('models/resnet50_adam_-001--0.53286--0.77641--0.81211.hdf5')
-        f='fine_tune_' if fine_tune else str()
-        model_file_name=model_name+'_'+f+optimizer+'_'+'-{epoch:03d}--{val_loss:.5f}--{val_acc:.5f}--{val_f1:.5f}.hdf5'
+        f='fine_tune--' if fine_tune else str()
+        model_file_name='multi_scale--'+model_name+'--'+f+optimizer+'-'+'-{epoch:03d}--{val_loss:.5f}--{val_acc:.5f}--{val_f1:.5f}.hdf5'
         model.fit_generator(
             generator=data.generator(is_train=True),
             steps_per_epoch=data.steps_per_epoch,
@@ -351,9 +355,9 @@ class Mymodel(object):
         :return:
         """
         if model_name.lower()=='nasnetlarge':
-            self.shape=(331,331,3)
+            self.shape_list=[(331,331,3),(662,662,3)]
         elif model_name.lower()=='nasnetmobile':
-            self.shape=(224,224,3)
+            self.shape_list=[(224,224,3),(448,448,3)]
         model=self.build_network(model_name,fine_tune)
         model.load_weights(model_path)
         epoch=model_path.split('--')[0][-3:]
@@ -364,24 +368,30 @@ class Mymodel(object):
         id=[]
         label=[]
         probs=[]
+        prob_file=open(os.path.join('submissions','multiscale_prob_{}_{}.txt'),'w',encoding='utf-8')
         for i in os.listdir(test_dir):
             c+=1
             try:
                 path = os.path.join(test_dir, i)
                 img = Image.open(path)
                 img=img.convert('RGB')
-                img = img.resize(size=(self.shape[1], self.shape[0]), resample=Image.ANTIALIAS)
-                img = np.array(img)
-                img = (img / 255.0) * 2.0 - 1.0
-                inputs=np.expand_dims(img,axis=0)
-                pred=model.predict(inputs)
+                prob=[]
+                for shape in self.shape_list:
+                    img_t = img.resize(size=(shape[1], shape[0]), resample=Image.ANTIALIAS)
+                    img_t=np.array(img_t)
+                    img_t = (img_t / 255.0) * 2.0 - 1.0
+                    inputs=np.expand_dims(img_t,0)
+                    pred = model.predict(inputs)
+                    prob.append(pred[0,0])
                 """
                 如果pred<0.5那么应该是虚假图片，按照我的标注应该是0，但是提交要求是虚假新闻是1
                 如果pred>=0.5,那么应该是真实图片，真实图片的label是0
                 """
-                probs.append(pred[0][0])
-                print(i,pred[0][0],'{}/{}'.format(c,len(os.listdir(test_dir))))
-                if pred[0][0]<=0.5:
+                mean_prob=sum(prob)/len(prob)
+                probs.append(mean_prob)
+                print(i,mean_prob,'{}/{}'.format(c,len(os.listdir(test_dir))))
+                prob_file.write('{},{}\n'.format(i.split('.')[0],mean_prob))
+                if mean_prob<=0.5:
                     id.append(i.split('.')[0])
                     label.append(1)
                     submit.write('{},{}\n'.format(i.split('.')[0],1))
@@ -395,6 +405,7 @@ class Mymodel(object):
         submit.write('\n')
         fail.close()
         submit.close()
+        prob_file.close()
         return id,probs
     def ensemble(self,model_path_list,mode='vote',test_image_dir=None):
         """
@@ -529,7 +540,8 @@ class Mymodel(object):
                         all_train_dict[id[j]].append(probs[j])
                         train_prob_file.write('{},{}\n'.format(id[j], probs[j]))
                         if len(all_train_dict[id[j]]) > len(model_path_list):
-                            raise ValueError(
+                            all_train_dict[id[j]]=all_train_dict[id[j]][:len(model_path_list)]
+                            print(
                                 '{}得到的probs是{}个,然而最多只能是{}个'.format(id[j], len(all_train_dict[id[j]]), len(model_path_list)))
                     train_prob_file.close()
                 else:
@@ -538,32 +550,78 @@ class Mymodel(object):
                     for line in train_prob_file:
                         if line!='\n':
                             temp = line.split(',')
-                            all_train_dict[temp[0].strip().strip(',')].append(temp[-1].strip('\n'))
+                            all_train_dict[temp[0].strip().strip(',')].append(float(temp[-1].strip('\n')))
             all_data=[]
             for id in all_train_dict:
                 all_data.append([id]+list(all_train_dict[id])+list(all_labels[id]))
             all_data=np.array(all_data)
             print('all data shape:{}'.format(all_data.shape))
             np.random.shuffle(all_data)
-            from sklearn.model_selection import KFold,train_test_split,cross_val_score,cross_validate
+            from sklearn.model_selection import KFold,train_test_split
+            from sklearn.metrics import f1_score
             from sklearn.linear_model import LinearRegression
             from sklearn.svm import SVC,SVR
-            X_train, X_test, y_train, y_test = train_test_split(all_data[:,1:-1], all_data[:,-1], test_size=0.3, random_state=0)
+            X_train, X_test, y_train, y_test = train_test_split(all_data[:,1:-1], all_data[:,-1], test_size=0.5, random_state=2019)
             print('训练集大小：', X_train.shape, y_train.shape)  # 训练集样本大小
             print('测试集大小：', X_test.shape, y_test.shape)  # 测试集样本大小
-            # clf = SVC(kernel='linear', C=1).fit(X_train, y_train)  # 使用训练集训练模型
-            # print('准确率：', )  # 计算测试集的度量值（准确率）
+            kf=KFold(n_splits=5,shuffle=True)
+            model=None
+            for k,(train_index,test_index) in enumerate(kf.split(X_train,y_train)):
+                kf_x_train=X_train[train_index]
+                kf_x_test=X_train[test_index]
+                kf_y_train=y_train[train_index]
+                kf_y_test=y_train[test_index]
+                if mode=='lr':
+                    model=LinearRegression()
+                elif mode=='svc_linear':
+                    model=SVC(kernel='linear')
+                elif mode=='svr_linear':
+                    model=SVR(kernel='linear')
+                elif mode=='svc_rbf':
+                    model=SVC()
+                elif mode=='svr_rbf':
+                    model=SVR()
+                else:
+                    model=SVC(kernel='rbf')
+                model.fit(kf_x_train, kf_y_train)
+                print('{}:{}折交叉验证的score是{}'.format(mode,k,model.score(kf_x_test,kf_y_test)))
+                prediction=model.predict(kf_x_test)
+                for j in prediction:
+                    if j not in [0,1]:
+                        j=1 if j>=0.5 else 0
+                fs=f1_score(kf_y_test,prediction)
+                print('{}:{}折交叉验证的f1_score是{}'.format(mode,k,fs))
+            cv_pred=model.predict(X_test)
+            for j in cv_pred:
+                if j not in [0,1]:
+                    j=1 if j>=0.5 else 0
+            cv_f1_score=f1_score(y_test,cv_pred)
+            print('{}:交叉验证的cv_f1_score是{}'.format(mode, cv_f1_score))
+            print('开始预测测试集......')
+            need_predict_x=np.array(id2probs.values())
+            final_prediction=model.predict(need_predict_x)
+            for i in range(len(final_prediction)):
+                p=0 if final_prediction[i]>0.5 else 1
+                f.write(list(id2probs.keys())[i]+','+str(p)+'\n')
+            f.write('\n')
+            f.close()
+            import pickle
+            with open('models/{}_{}_{}_emsemble_model.pickle'.format(mode,cv_f1_score,csv_name), 'wb') as f:
+                pickle.dump(model, f)
+                print('保存{}_{}_{}model完成！'.format(mode,cv_f1_score,csv_name))
+
 if __name__=='__main__':
-    m = Mymodel(shape=(256, 256, 3), batch_size=16)
-    m.ensemble(
-        model_path_list=['models/densenet121_adam_-043--0.51932--0.90141.hdf5',
-                         'models/densenet121_adam_-046--0.78712--0.90434.hdf5',
-                         'models/Xception_adam_-021--0.53468--0.90346--0.91855.hdf5',
-                         'models/Xception_adam_-011--0.43643--0.89143--0.90778.hdf5',
-                         'models/Xception_adam_-024--0.84816--0.90405--0.91918.hdf5',
-                         'models/densenet121_adam_-074--1.06862--0.91197.hdf5',
-                         'models/densenet121_adam_-053--0.87286--0.90522.hdf5',
-                         'models/densenet121_adam_-058--0.89474--0.90933.hdf5'
-                         ],
-        mode='lr',test_image_dir='stage1_test'
-    )
+    m = Mymodel(shape_list=[(256, 256, 3),(128,128,3),(512,512,3)], batch_size=8)
+    m.train(model_name='densenet121',fine_tune=False)
+    # m.ensemble(
+    #     model_path_list=['models/densenet121_adam_-043--0.51932--0.90141.hdf5',
+    #                      'models/densenet121_adam_-046--0.78712--0.90434.hdf5',
+    #                      'models/Xception_adam_-021--0.53468--0.90346--0.91855.hdf5',
+    #                      'models/Xception_adam_-011--0.43643--0.89143--0.90778.hdf5',
+    #                      'models/Xception_adam_-024--0.84816--0.90405--0.91918.hdf5',
+    #                      'models/densenet121_adam_-074--1.06862--0.91197.hdf5',
+    #                      'models/densenet121_adam_-053--0.87286--0.90522.hdf5',
+    #                      'models/densenet121_adam_-058--0.89474--0.90933.hdf5'
+    #                      ],
+    #     mode='lr',test_image_dir='stage1_test'
+    # )
